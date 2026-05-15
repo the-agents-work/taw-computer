@@ -1,0 +1,114 @@
+# syntax=docker/dockerfile:1.6
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+RUN apt-get update -qq && \
+    apt-get install -y -qq --no-install-recommends \
+        ca-certificates curl wget gnupg \
+        git python3 python3-pip python3-venv \
+        build-essential nano vim less jq \
+        xvfb x11vnc \
+        xfce4 xfce4-terminal dbus-x11 \
+        websockify novnc \
+        xdotool scrot imagemagick xclip \
+        firefox \
+        fonts-liberation libu2f-udev libvulkan1 \
+        ripgrep tree sqlite3 httpie \
+        postgresql-client mariadb-client redis-tools \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y -qq --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# GitHub CLI — official apt repo
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# yq — single binary for YAML/JSON/XML.
+# Pick arch-matching binary so the image builds native on both arm64 + amd64.
+RUN ARCH=$(dpkg --print-architecture); \
+    case "$ARCH" in \
+      amd64) YQ_BIN=yq_linux_amd64 ;; \
+      arm64) YQ_BIN=yq_linux_arm64 ;; \
+      *) echo "unsupported arch $ARCH"; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/${YQ_BIN}" -o /usr/local/bin/yq \
+    && chmod +x /usr/local/bin/yq
+
+# Playwright bundled Chromium — replaces Google Chrome.
+# Why: Google Chrome ships amd64-only, which forces Rosetta on Apple Silicon
+# and triggers crashpad SIGTRAPs + paint failures + CDP-binding regressions on
+# Chrome 148+. Playwright maintains arm64 + amd64 native builds tested in
+# containers, listens on 0.0.0.0 by default, and is the same binary our
+# `playwright-core` host code already drives. Same browser everywhere.
+# `--with-deps` installs all required system libs (fonts, libnss, etc).
+RUN npm install -g playwright@latest \
+    && playwright install --with-deps chromium \
+    && ln -sf "$(find /root/.cache/ms-playwright -name chrome -path '*chrome-linux*' -type f -executable | head -1)" /usr/local/bin/chromium \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Non-root user ────────────────────────────────────────────────────
+# Create a dedicated user so the container doesn't run as root.
+# Passwordless sudo for when apt/pip installs are needed at runtime.
+RUN useradd -m -s /bin/bash -u 1000 taw \
+    && apt-get update -qq && apt-get install -y -qq --no-install-recommends sudo \
+    && echo "taw ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && rm -rf /var/lib/apt/lists/*
+
+# Move Playwright browsers from /root to taw's home so non-root can use them
+RUN mv /root/.cache /home/taw/.cache 2>/dev/null || true \
+    && mkdir -p /home/taw/.config/chrome-profile \
+    && chown -R taw:taw /home/taw/.cache /home/taw/.config \
+    && ln -sf "$(find /home/taw/.cache/ms-playwright -name chrome -path '*chrome-linux*' -type f -executable | head -1)" /usr/local/bin/chromium
+
+# CDP bridge: Chromium silently binds 127.0.0.1 even with
+# --remote-debugging-address=0.0.0.0 (security tightening from Chromium ~M148).
+# This tiny Python TCP forwarder listens on 0.0.0.0:9223 and proxies to the
+# internal 127.0.0.1:9222, restoring host docker port reachability without
+# extra apt packages.
+COPY <<'EOF' /usr/local/bin/cdp-bridge
+#!/usr/bin/env python3
+import socket, threading, sys
+def relay(a, b):
+    try:
+        while True:
+            d = a.recv(8192)
+            if not d: break
+            b.sendall(d)
+    finally:
+        try: a.close()
+        except: pass
+        try: b.close()
+        except: pass
+LISTEN_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9223
+TARGET_PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 9222
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(("0.0.0.0", LISTEN_PORT))
+s.listen(50)
+while True:
+    c, _ = s.accept()
+    try:
+        u = socket.socket()
+        u.connect(("127.0.0.1", TARGET_PORT))
+    except OSError:
+        c.close()
+        continue
+    threading.Thread(target=relay, args=(c, u), daemon=True).start()
+    threading.Thread(target=relay, args=(u, c), daemon=True).start()
+EOF
+RUN chmod +x /usr/local/bin/cdp-bridge
+
+RUN mkdir -p /workspace && chown taw:taw /workspace
+
+USER taw
+WORKDIR /workspace
+ENV HOME=/home/taw
+
+CMD ["tail", "-f", "/dev/null"]

@@ -1,0 +1,14 @@
+/node_modules
+.DS_Store
+*.pem
+npm-debug.log*
+.env
+.env*.local
+*.tsbuildinfo
+/.taw-computer
+
+# Firecracker images (large binaries, built locally)
+images/vmlinux
+images/rootfs.ext4
+images/id_rsa
+images/id_rsa.pub

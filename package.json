@@ -1,0 +1,42 @@
+{
+  "name": "taw-computer",
+  "version": "0.2.0",
+  "description": "Open source AI computer — MCP server with Ubuntu sandbox, browser, and desktop automation. Give any AI a real computer.",
+  "type": "module",
+  "bin": {
+    "taw-computer": "./mcp/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx mcp/index.ts",
+    "start": "tsx mcp/index.ts",
+    "typecheck": "tsc --noEmit",
+    "image:build": "docker build -f images/Dockerfile.taw -t taw-computer-base ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "playwright-core": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  },
+  "keywords": [
+    "mcp",
+    "ai",
+    "sandbox",
+    "docker",
+    "browser-automation",
+    "desktop-automation",
+    "computer-use",
+    "ai-agent",
+    "claude",
+    "model-context-protocol"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/the-agents-work/taw-computer.git"
+  },
+  "homepage": "https://github.com/the-agents-work/taw-computer"
+}

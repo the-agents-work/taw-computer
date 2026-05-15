@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "taw-computer": {
+      "command": "npx",
+      "args": ["tsx", "./mcp/index.ts"],
+      "env": {
+        "MAX_SANDBOXES": "3",
+        "DOCKER_MEMORY_MB": "4096",
+        "DESKTOP_RESOLUTION": "1280x720"
+      }
+    }
+  }
+}

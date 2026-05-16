@@ -119,6 +119,40 @@ taw-computer speaks standard MCP over stdio. Any client that supports MCP can co
 
 </details>
 
+<details>
+<summary><strong>Remote server (SSH)</strong> — run on a beefy machine, use from your laptop</summary>
+
+Got a powerful server / Mac Mini / VPS? Run taw-computer there and connect from anywhere:
+
+```json
+{
+  "mcpServers": {
+    "taw-computer": {
+      "command": "ssh",
+      "args": ["user@your-server", "cd /path/to/taw-computer && npx tsx mcp/index.ts"]
+    }
+  }
+}
+```
+
+```
+Your laptop (Claude Code)
+    ↕ SSH (stdin/stdout piped over network)
+Remote server (taw-computer + Docker)
+    ↕ Docker
+Ubuntu sandbox
+```
+
+Setup:
+1. On the server: install Docker, clone repo, build image, `npm install`
+2. On the server: enable SSH (`sudo systemctl enable ssh`)  
+3. On your laptop: `ssh-copy-id user@your-server` (passwordless login)
+4. Add the MCP config above — done!
+
+Watch via VNC: open `http://your-server:6080` in your browser.
+
+</details>
+
 **That's it.** Now tell your AI: *"Create a VM and build me a website"* — and watch it work.
 
 <br>
